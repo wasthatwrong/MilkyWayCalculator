@@ -8,22 +8,69 @@ import java.net.URL;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Scanner;
 
 public class CelestialObject {
-
-	private double DEC; // in degrees
-	private double RA;; // in hours
-	private String name; // name of celestial object
-	private Instant UTCTime; // UTC clock time
-	private double LAST; // Local absolute solar time
-	//private double azimuth;
-	private double altitude; // In degrees
 	
+	// current observation location in degrees
+	private static double LAT = 40.80518; // Latitude
+	private static double LONG = -73.71100; // Longitude
+	
+	// Current time
+	private static Instant UTCTime; // UTC clock time of observation
+	private static double LAST; // Local absolute sidereal time (using above coordinates)
+	
+	// List of all CelestialObjects, used to calculate their altitudes whenever observation time/position changes
+	private static List<CelestialObject> allObjects;
+	
+	private double DEC; // Declination of object in degrees
+	private double RA;; // Right ascension in hours (decimal format)
+	private String name; // Name of celestial object
+	
+	private double azimuth; // Azimuth in degrees
+	private double altitude; // Altitude in sky in degrees
+	
+	
+	/**
+	 * Sets name, declination, and right ascension. Sets UTCTime to current time if it doesn't exist. Generates altitude in the sky.
+	 * 
+	 * @param name
+	 * @param DEC
+	 * @param RA
+	 */
+	public CelestialObject(String name, double DEC, double RA) {
+		setName(name);
+		setDEC(DEC);
+		setRA(RA);
+		
+		// Creates list of all objects if it doesn't exist
+		if(allObjects == null) {
+			allObjects = new ArrayList<>();
+		}
+		
+		// Adds this object to the list
+		allObjects.add(this);
+		
+		if(UTCTime == null) {
+			System.out.println("Automatically generating UTCTime.");
+			
+			setUTCTime(Instant.now());
+		} else {
+			calculateAltitude();
+		}
+	}
+	
+	/**
+	 * Gets current observation time in UTC time
+	 * 
+	 * @return Instant UTCTime
+	 */
 	public Instant getUTCTime() {
 		return UTCTime;
 	}
-
+	
 	public void incrementHour(int amount) {
 		// Increments UTCTime by amount (hours)
 		UTCTime = UTCTime.plusSeconds(3600*amount);
@@ -31,56 +78,32 @@ public class CelestialObject {
 		// Increments local absolute solar time by slightly more than 1hr per hour to account for the difference between sidereal and solar days
 		LAST = (LAST+amount*(24/23.9344696))%24;
 		
-		// calculates new altitude with new observation time
-		calculateAltitude();
+		// calculates new altitude with new observation time for every CelestialObject
+		for(CelestialObject object : allObjects) {
+			object.calculateAltitude();
+		}
 	}
 	
-	public void setUTCTime(Instant UTCTime) {
-		this.UTCTime = UTCTime;
+	/**
+	 * Sets UTC time to the paramter, retrieves local sidereal time from the US navy, and calculates the altitude  for this object.
+	 * 
+	 * @param UTCTime
+	 * @return 
+	 */
+	public static void setUTCTime(Instant UTCTime) {
+		CelestialObject.UTCTime = UTCTime;
+		
 		getLAST();
-	}
-
-	public CelestialObject(String name, double DEC, double RA) {
-		setName(name);
-		setDEC(DEC);
-		setRA(RA);
-	}
-
-
-	public void setDEC(double dEC) {
-		DEC = dEC;
-	}
-
-	public void setRA(double rA) {
-		RA = rA;
-	}
-
-	public String getName() {
-		return name;
-	}
-
-	public void setName(String name) {
-		this.name = name;
-	}
-
-	private double calculateAltitude() {
 		
-		// Calculates hour angle of the object
-		double H = (LAST - RA) * (360 / 24);
-		
-		// Calculates altitude of the object in the sky
-		altitude = Math.asin(Math.sin(Main.LAT * Math.PI / 180) * Math.sin(DEC * Math.PI / 180) + Math.cos(Main.LAT * Math.PI / 180) * Math.cos(DEC * Math.PI / 180) * Math.cos((H * Math.PI) / 180));
-		
-		altitude = altitude*180/Math.PI;
-		
-		return altitude;
+		// Calcualtes altitude for all CelestialObjects using the retrieved LAST
+		for(CelestialObject object : allObjects) 
+			object.calculateAltitude();
 	}
 	
-	public double getAltitude() {
-		return altitude;
-	}
-	
-	private void getLAST() {
+	/**
+	 * Gets local absolute sidereal time from US Navy. Only needs to be called once. 
+	 */
+	private static void getLAST() {
 		
 		// Used to put in the API call
 		String date = DateTimeFormatter.ISO_LOCAL_DATE.withZone(ZoneOffset.UTC).format(UTCTime);
@@ -88,7 +111,7 @@ public class CelestialObject {
 		int minute = UTCTime.atZone(ZoneOffset.UTC).getMinute();
 		int second = UTCTime.atZone(ZoneOffset.UTC).getSecond();
 		
-		String urlString = String.format("https://aa.usno.navy.mil/api/siderealtime?date=%s&time=%s:%s:%s&coords=%s,%s&reps=1&intv_mag=1&intv_unit=minutes", date, hour, minute, second, Main.LAT, Main.LONG);
+		String urlString = String.format("https://aa.usno.navy.mil/api/siderealtime?date=%s&time=%s:%s:%s&coords=%s,%s&reps=1&intv_mag=1&intv_unit=minutes", date, hour, minute, second, LAT, LONG);
 		HttpURLConnection urlConnection;
 		
 		// API result to parse
@@ -130,10 +153,42 @@ public class CelestialObject {
 		scnr.close();
 		
 		System.out.println(LAST);
-		
-		// Calculates the altitude with this sidereal time
-		calculateAltitude();
 	}
+
+	public void setDEC(double dEC) {
+		DEC = dEC;
+	}
+
+	public void setRA(double rA) {
+		RA = rA;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	public void setName(String name) {
+		this.name = name;
+	}
+	
+	private double calculateAltitude() {
+		
+		// Calculates hour angle of the object
+		double H = (LAST - RA) * (360 / 24);
+		
+		// Calculates altitude of the object in the sky
+		altitude = Math.asin(Math.sin(LAT * Math.PI / 180) * Math.sin(DEC * Math.PI / 180) + Math.cos(LAT * Math.PI / 180) * Math.cos(DEC * Math.PI / 180) * Math.cos((H * Math.PI) / 180));
+		
+		altitude = altitude*180/Math.PI;
+		
+		return altitude;
+	}
+	
+	public double getAltitude() {
+		return altitude;
+	}
+	
+	
 	
 	public boolean isVisible() {
 		return altitude > 0;

@@ -3,10 +3,6 @@ import java.time.ZoneId;
 
 public class Main {
 	
-	// current location in degrees
-	static double LAT = 40.80518;
-	static double LONG = -73.71100;
-	
 	public static void main(String[] args) {
 		
 		// current UTC time
