@@ -247,9 +247,6 @@ public class CelestialObjectList {
 		}
 
 		public String toString() {
-
-			LocalTime localTime = LocalTime.from(UTCTime.atZone(ZoneId.systemDefault()));
-			LocalDate localDate = LocalDate.from(UTCTime.atZone(ZoneId.systemDefault()));
 			String r = String.format("%s:\n\tAltitude: %s degrees\n\tVisible: ", name, getAltitude());
 
 			if (isVisible())
