@@ -5,23 +5,19 @@ public class Main {
 	
 	public static void main(String[] args) {
 		
-		// current UTC time
-		Instant now = Instant.now();
+		double LAT = 40.80518; // Latitude
+		double LONG = -73.71100; // Longitude
+		
+		CelestialObject.setLAT(LAT);
+		CelestialObject.setLONG(LONG);
 		
 		// Object at/near the center of the great rift 
 		CelestialObject shaula = new CelestialObject("Shaula", -37.103889, 17.5602777778);
 		
-		// sets observation time to current time
-		shaula.setUTCTime(now);
-		
-		
-		for(int i = 0; i < 24*100; i+=24) {
-			System.out.print(shaula.getUTCTime().atZone(ZoneId.of("US/Eastern")) + ":\n\t"  + shaula.getAltitude() + " degrees, ");
-			if(!shaula.isVisible())
-				System.out.print("not ");
-			
-			System.out.println("visible.\n");
-			shaula.incrementHour(24);
+		for (int i = 0; i < 72; i++) {
+			System.out.println(shaula);
+			System.out.println();
+			CelestialObject.incrementHour(1);
 		}
 	}
 }
