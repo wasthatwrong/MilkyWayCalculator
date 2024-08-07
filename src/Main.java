@@ -8,16 +8,15 @@ public class Main {
 		double LAT = 40.80518; // Latitude
 		double LONG = -73.71100; // Longitude
 		
-		CelestialObject.setLAT(LAT);
-		CelestialObject.setLONG(LONG);
+		CelestialObjectList celestialObjects = new CelestialObjectList();
+		celestialObjects.setCoordinates(LAT, LONG);
 		
-		// Object at/near the center of the great rift 
-		CelestialObject shaula = new CelestialObject("Shaula", -37.103889, 17.5602777778);
+		celestialObjects.addCelestialObject("Shaula", 17.5602777778, -37.103889);
+		celestialObjects.addCelestialObject("Northern Coalsack", 20.6280277778, 42.2732222222 );
 		
-		for (int i = 0; i < 72; i++) {
-			System.out.println(shaula);
-			System.out.println();
-			CelestialObject.incrementHour(1);
+		for (int i = 0; i < 20; i++) {
+			System.out.println(celestialObjects.toString());
+			celestialObjects.incrementTime(24*100000);
 		}
 	}
 }
