@@ -16,18 +16,26 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
 
+/**
+ * Searchable list of celestial objects that share an observation location, and
+ * observation time. Useful for keeping observation data syncronized between
+ * multiple celestial objects.
+ * 
+ * @author Bradley
+ *
+ */
 public class CelestialObjectList {
 
-	// Used to mark every object's location as out of sync when observation position/time changes.
+	// Allows for searching of objects by name to retrieve their position in the sky.
 	private Map<String, CelestialObject> celestialObjects = new HashMap<>();
 
-	// Current observation location in degrees
+	// Current observation coordinates in degrees (decimal format)
 	private double LAT; // Latitude (-90 to 90)
 	private double LONG; // Longitude (-180 to 180)
 
 	// Time of observation
 	private Instant UTCTime;
-	private double localAbsoluteSiderealTime; // Sidereal time in decimal format (0-24)
+	private double localAbsoluteSiderealTime; // Sidereal time of observation location in decimal format (0-24)
 
 	/**
 	 * Adds a new object to the map to share its observation location and time with
@@ -43,7 +51,8 @@ public class CelestialObjectList {
 
 	/**
 	 * Sets observation latitude and longitude in decimal format, and sets all
-	 * object positions to be out of sync.
+	 * object positions to be out of sync. Currently does not correct the sidereal
+	 * time for your current location.
 	 * 
 	 * @param LAT  - latitude
 	 * @param LONG - longitude
@@ -58,9 +67,10 @@ public class CelestialObjectList {
 	}
 
 	/**
-	 * Sets UTC time, retrieves local sidereal time from the US navy if
-	 * localAbsoluteSiderealTime hasn't been initialized, and sets all objects'
-	 * positions to not be in sync with observation time/position.
+	 * Sets UTC time and local sidereal time for the current location, and sets all
+	 * objects' positions to not be in sync with observation time/position. If
+	 * localAbsoluteSiderealTime hasn't been initialized, it will retrieve the local
+	 * sidereal time from the US navy.
 	 * 
 	 * @param UTCTime - new observation time
 	 */
@@ -71,7 +81,7 @@ public class CelestialObjectList {
 			initializeLocalAbsoluteSiderealTime();
 		} else {
 			// Calculates the difference between old and new time in hours
-			Duration duration = Duration.between(this.UTCTime, UTCTime); // If localAbsoluteSiderealTime isn't 0, then UTCTime cannot be 0.
+			Duration duration = Duration.between(this.UTCTime, UTCTime);
 			long hours = duration.toHours();
 			incrementTime(hours);
 		}
@@ -193,15 +203,15 @@ public class CelestialObjectList {
 		 * it doesn't exist.
 		 * 
 		 * @param name - name of object
-		 * @param RA - right ascension
-		 * @param DEC - declination
+		 * @param RA   - right ascension
+		 * @param DEC  - declination
 		 */
 		public CelestialObject(String name, double RA, double DEC) {
-			
+
 			this.name = name;
 			rightAscension = RA;
 			declination = DEC;
-			
+
 			if (UTCTime == null) {
 				System.out.println("Automatically generating UTCTime.");
 
@@ -212,30 +222,33 @@ public class CelestialObjectList {
 		public String getName() {
 			return name;
 		}
-		
+
 		public double getRightAscension() {
 			return rightAscension;
 		}
-		
+
 		public double getDeclination() {
 			return getDeclination();
 		}
-		
+
 		private void calculateAltitude() {
-
-			// Calculates hour angle of the object
-			double H = (localAbsoluteSiderealTime - rightAscension) * (360 / 24);
-
+		
+			// Calculates hour angle (in degrees) of the object using the sidereal time and right ascension of the object.
+			double hourAngle = (localAbsoluteSiderealTime - rightAscension) * (360 / 24);
+			
 			// Calculates altitude of the object in the sky
-			altitude = Math.asin(Math.sin(LAT * Math.PI / 180) * Math.sin(declination * Math.PI / 180) + Math.cos(LAT * Math.PI / 180) * Math.cos(declination * Math.PI / 180) * Math.cos((H * Math.PI) / 180));
-
-			altitude = altitude * 180 / Math.PI;
-
+			altitude = Math.sin(Math.toRadians(LAT)) * Math.sin(Math.toRadians(declination));
+			altitude += Math.cos(Math.toRadians(LAT)) * Math.cos(Math.toRadians(declination)) * Math.cos(Math.toRadians(hourAngle));
+			altitude = Math.asin(altitude);
+			
+			// Converts from radians to degrees
+			altitude = Math.toDegrees(altitude);
+			
 			positionSyncedWithObservationTime = true;
 		}
-		
-		public double getAltitude() {
 
+		public double getAltitude() {
+			
 			if (!positionSyncedWithObservationTime)
 				calculateAltitude();
 
@@ -248,26 +261,26 @@ public class CelestialObjectList {
 
 		public String toString() {
 			String r = String.format("%s:\n\tAltitude: %s degrees\n\tVisible: ", name, getAltitude());
-
+			
 			if (isVisible())
 				r += "Yes";
 			else
 				r += "No";
-			
+
 			r += "\n";
 			return r;
-
 		}
 	}
 	
 	public String toString() {
+		// Local date/time as header. Reminder to change it from local time to the time at the observation location.
 		LocalTime localTime = LocalTime.from(UTCTime.atZone(ZoneId.systemDefault()));
 		LocalDate localDate = LocalDate.from(UTCTime.atZone(ZoneId.systemDefault()));
 		String r = String.format("%s %s:", localDate, localTime);
 		
 		for (CelestialObject object : celestialObjects.values())
 			r += "\n\t" + object;
-		
+
 		return r;
 	}
 }
