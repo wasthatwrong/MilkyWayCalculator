@@ -19,7 +19,7 @@ public class Main {
 		// For testing accuracy at future dates	
 		/*for (int i = 0; i < 20; i++) {
 			System.out.println(celestialObjects.toString());
-			celestialObjects.incrementTime(24 * 19000);
+			celestialObjects.incrementTime(24 * 100);
 		}*/
 	}
 }
