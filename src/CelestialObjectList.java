@@ -35,7 +35,28 @@ public class CelestialObjectList {
 
 	// Time of observation
 	private Instant UTCTime;
-	private double localAbsoluteSiderealTime; // Sidereal time of observation location in decimal format (0-24)
+	private double localAbsoluteSiderealTime; // Sidereal time of observation location in decimal format (0-24).
+
+	/**
+	 * Creates a celestial object list with the observation time as the parameter,
+	 * and the location as 0,0.
+	 * 
+	 * @param UTC time to initialize to
+	 */
+	public CelestialObjectList(Instant UTCTime) {
+		this.UTCTime = UTCTime;
+		initializeLocalAbsoluteSiderealTime();
+	}
+
+	/**
+	 * Creates a celestial object list with the observation time as the current
+	 * system time, and location as 0,0.
+	 */
+	public CelestialObjectList() {
+		System.out.println("Automatically generating UTCTime.");
+		this.UTCTime = Instant.now();
+		initializeLocalAbsoluteSiderealTime();
+	}
 
 	/**
 	 * Adds a new object to the map to share its observation location and time with
@@ -51,16 +72,22 @@ public class CelestialObjectList {
 
 	/**
 	 * Sets observation latitude and longitude in decimal format, and sets all
-	 * object positions to be out of sync. Currently does not correct the sidereal
-	 * time for your current location.
+	 * object positions to be out of sync.
 	 * 
 	 * @param LAT  - latitude
 	 * @param LONG - longitude
 	 */
 	public void setCoordinates(double LAT, double LONG) {
+		
+		// Changes sidereal time only if new longitude differs from old longitude
+		if(Double.compare(this.LONG, LONG) != 0) {
+			double deltaSiderealTime = (LONG - this.LONG) / 15; // Difference in sidereal time in hours, where 1hr = 15 degrees of longitude
+			localAbsoluteSiderealTime = (localAbsoluteSiderealTime + deltaSiderealTime) % 24; // Sets new sidereal time at current location
+			this.LONG = LONG;
+		}
+		
 		this.LAT = LAT;
-		this.LONG = LONG;
-
+		
 		// Sets all objects' positions to not be in sync with observation time/position
 		for (CelestialObject object : celestialObjects.values())
 			object.positionSyncedWithObservationTime = false;
@@ -68,23 +95,16 @@ public class CelestialObjectList {
 
 	/**
 	 * Sets UTC time and local sidereal time for the current location, and sets all
-	 * objects' positions to not be in sync with observation time/position. If
-	 * localAbsoluteSiderealTime hasn't been initialized, it will retrieve the local
-	 * sidereal time from the US navy.
+	 * objects' positions to not be in sync with observation time/position.
 	 * 
 	 * @param UTCTime - new observation time
 	 */
 	public void setUTCTime(Instant UTCTime) {
+		// Calculates the difference between old and new time in hours
+		Duration duration = Duration.between(this.UTCTime, UTCTime);
+		long hours = duration.toHours();
 
-		if (localAbsoluteSiderealTime == 0) {
-			this.UTCTime = UTCTime;
-			initializeLocalAbsoluteSiderealTime();
-		} else {
-			// Calculates the difference between old and new time in hours
-			Duration duration = Duration.between(this.UTCTime, UTCTime);
-			long hours = duration.toHours();
-			incrementTime(hours);
-		}
+		incrementTime(hours);
 	}
 
 	/**
@@ -146,6 +166,7 @@ public class CelestialObjectList {
 		int lastIndex = result.indexOf("\"last\":");
 		int valueStart = result.indexOf("\"", lastIndex + 7) + 1;
 		int valueEnd = result.indexOf("\"", valueStart);
+		
 		String siderealTime = result.substring(valueStart, valueEnd);
 
 		Scanner scnr = new Scanner(siderealTime);
@@ -156,8 +177,6 @@ public class CelestialObjectList {
 		localAbsoluteSiderealTime += scnr.nextDouble() / 60;
 		localAbsoluteSiderealTime += scnr.nextDouble() / 3600;
 		scnr.close();
-
-		System.out.println(localAbsoluteSiderealTime);
 	}
 
 	/**
@@ -172,10 +191,19 @@ public class CelestialObjectList {
 	/**
 	 * Gets current observation time in UTC time
 	 * 
-	 * @return Instant UTCTime
+	 * @return UTCTime
 	 */
 	public Instant getUTCTime() {
 		return UTCTime;
+	}
+
+	/**
+	 * Gets the absolute sidereal time in hours at the current observation location.
+	 * 
+	 * @return localAbsoluteSiderealTime
+	 */
+	public double getLocalAbsoluteSiderealTime() {
+		return localAbsoluteSiderealTime;
 	}
 
 	public CelestialObject getCelestialObject(String name) {
@@ -199,24 +227,16 @@ public class CelestialObjectList {
 		private double altitude; // In degrees (-90 to 90)
 
 		/**
-		 * Sets name, right ascension, and declination. Sets UTCTime to current time if
-		 * it doesn't exist.
+		 * Sets name, right ascension, and declination.
 		 * 
 		 * @param name - name of object
 		 * @param RA   - right ascension
 		 * @param DEC  - declination
 		 */
 		public CelestialObject(String name, double RA, double DEC) {
-
 			this.name = name;
 			rightAscension = RA;
 			declination = DEC;
-
-			if (UTCTime == null) {
-				System.out.println("Automatically generating UTCTime.");
-
-				setUTCTime(Instant.now()); // Calculates all new altitudes as well
-			}
 		}
 
 		public String getName() {
@@ -232,23 +252,23 @@ public class CelestialObjectList {
 		}
 
 		private void calculateAltitude() {
-		
+
 			// Calculates hour angle (in degrees) of the object using the sidereal time and right ascension of the object.
 			double hourAngle = (localAbsoluteSiderealTime - rightAscension) * (360 / 24);
-			
+
 			// Calculates altitude of the object in the sky
 			altitude = Math.sin(Math.toRadians(LAT)) * Math.sin(Math.toRadians(declination));
 			altitude += Math.cos(Math.toRadians(LAT)) * Math.cos(Math.toRadians(declination)) * Math.cos(Math.toRadians(hourAngle));
 			altitude = Math.asin(altitude);
-			
+
 			// Converts from radians to degrees
 			altitude = Math.toDegrees(altitude);
-			
+
 			positionSyncedWithObservationTime = true;
 		}
 
 		public double getAltitude() {
-			
+
 			if (!positionSyncedWithObservationTime)
 				calculateAltitude();
 
@@ -261,7 +281,7 @@ public class CelestialObjectList {
 
 		public String toString() {
 			String r = String.format("%s:\n\tAltitude: %s degrees\n\tVisible: ", name, getAltitude());
-			
+
 			if (isVisible())
 				r += "Yes";
 			else
@@ -271,13 +291,13 @@ public class CelestialObjectList {
 			return r;
 		}
 	}
-	
+
 	public String toString() {
 		// Local date/time as header. Reminder to change it from local time to the time at the observation location.
 		LocalTime localTime = LocalTime.from(UTCTime.atZone(ZoneId.systemDefault()));
 		LocalDate localDate = LocalDate.from(UTCTime.atZone(ZoneId.systemDefault()));
 		String r = String.format("%s %s:", localDate, localTime);
-		
+
 		for (CelestialObject object : celestialObjects.values())
 			r += "\n\t" + object;
 

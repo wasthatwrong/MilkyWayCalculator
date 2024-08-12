@@ -16,6 +16,10 @@ public class Main {
 		
 		System.out.println(celestialObjects.toString());
 		
+		celestialObjects.setCoordinates(90, LONG);
+		
+		System.out.println(celestialObjects.toString());
+		
 		// For testing accuracy at future dates
 		/*for (int i = 0; i < 20; i++) {
 			System.out.println(celestialObjects.toString());
