@@ -11,10 +11,12 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.TimeZone;
 
 /**
  * Searchable list of celestial objects that share an observation location, and
@@ -36,10 +38,11 @@ public class CelestialObjectList {
 	// Time of observation
 	private Instant UTCTime;
 	private double localAbsoluteSiderealTime; // Sidereal time of observation location in decimal format (0-24).
+	private TimeZone timezone = TimeZone.getTimeZone("UTC"); // Default timezone is UTC at 0,0
 
 	/**
 	 * Creates a celestial object list with the observation time as the parameter,
-	 * and the location as 0,0.
+	 * and the location as 0,0. Does not set timezone.
 	 * 
 	 * @param UTC time to initialize to
 	 */
@@ -78,16 +81,47 @@ public class CelestialObjectList {
 	 * @param LONG - longitude
 	 */
 	public void setCoordinates(double LAT, double LONG) {
-		
+
 		// Changes sidereal time only if new longitude differs from old longitude
-		if(Double.compare(this.LONG, LONG) != 0) {
+		if (Double.compare(this.LONG, LONG) != 0) {
 			double deltaSiderealTime = (LONG - this.LONG) / 15; // Difference in sidereal time in hours, where 1hr = 15 degrees of longitude
 			localAbsoluteSiderealTime = (localAbsoluteSiderealTime + deltaSiderealTime) % 24; // Sets new sidereal time at current location
 			this.LONG = LONG;
 		}
-		
+
 		this.LAT = LAT;
+
+		String urlString = String.format("https://timeapi.io/api/TimeZone/coordinate?latitude=%s&longitude=%s", LAT, LONG);
+
+		// API result to parse
+		String result = "";
+
+		try {
+			URL url = new URL(urlString);
+			HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
+			urlConnection.setRequestMethod("GET");
+			urlConnection.connect();
+
+			InputStream inputStream = urlConnection.getInputStream();
+			BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+
+			String s;
+			while ((s = reader.readLine()) != null)
+				result += s;
+
+		} catch (MalformedURLException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+
+		// Gets timezone ID from result
+		int valueEnd = result.indexOf("\"", 13);
+		String localTimeZone = result.substring(13, valueEnd);
 		
+		// Sets timezone to the correct ID
+		timezone.setID(localTimeZone);
+
 		// Sets all objects' positions to not be in sync with observation time/position
 		for (CelestialObject object : celestialObjects.values())
 			object.positionSyncedWithObservationTime = false;
@@ -166,7 +200,7 @@ public class CelestialObjectList {
 		int lastIndex = result.indexOf("\"last\":");
 		int valueStart = result.indexOf("\"", lastIndex + 7) + 1;
 		int valueEnd = result.indexOf("\"", valueStart);
-		
+
 		String siderealTime = result.substring(valueStart, valueEnd);
 
 		Scanner scnr = new Scanner(siderealTime);
@@ -287,19 +321,17 @@ public class CelestialObjectList {
 			else
 				r += "No";
 
-			r += "\n";
 			return r;
 		}
 	}
 
 	public String toString() {
-		// Local date/time as header. Reminder to change it from local time to the time at the observation location.
-		LocalTime localTime = LocalTime.from(UTCTime.atZone(ZoneId.systemDefault()));
-		LocalDate localDate = LocalDate.from(UTCTime.atZone(ZoneId.systemDefault()));
-		String r = String.format("%s %s:", localDate, localTime);
+		// Local date/time as header in the timezone of the observation location.
+		String r = UTCTime.atZone(ZoneId.of(timezone.getID())) + "\n";
+		r += "Location: " + getCoordinates();
 
 		for (CelestialObject object : celestialObjects.values())
-			r += "\n\t" + object;
+			r += "\n\t" + object + "\n";
 
 		return r;
 	}
