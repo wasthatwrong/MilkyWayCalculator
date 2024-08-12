@@ -1,7 +1,7 @@
 public class Main {
 
 	public static void main(String[] args) {
-		
+
 		// Group of all celestial objects to calculate locations
 		CelestialObjectList celestialObjects = new CelestialObjectList();
 		
@@ -16,11 +16,10 @@ public class Main {
 
 		System.out.println(celestialObjects.toString());
 
-		// For testing accuracy at future dates
-		/*
-		 * for (int i = 0; i < 20; i++) {
-		 * System.out.println(celestialObjects.toString());
-		 * celestialObjects.incrementTime(24*100000); }
-		 */
+		// For testing accuracy at future dates	
+		/*for (int i = 0; i < 20; i++) {
+			System.out.println(celestialObjects.toString());
+			celestialObjects.incrementTime(24 * 19000);
+		}*/
 	}
 }

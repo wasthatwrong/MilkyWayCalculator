@@ -13,6 +13,10 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoField;
+import java.time.temporal.ChronoUnit;
+import java.time.temporal.JulianFields;
+import java.time.temporal.TemporalField;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
@@ -37,7 +41,7 @@ public class CelestialObjectList {
 
 	// Time of observation
 	private Instant UTCTime;
-	private double localAbsoluteSiderealTime; // Sidereal time of observation location in decimal format (0-24).
+	private double localMeanSiderealTime; // Sidereal time of observation location in decimal format (0-24).
 	private TimeZone timezone = TimeZone.getTimeZone("UTC"); // Default timezone is UTC at 0,0
 
 	/**
@@ -48,7 +52,7 @@ public class CelestialObjectList {
 	 */
 	public CelestialObjectList(Instant UTCTime) {
 		this.UTCTime = UTCTime;
-		initializeLocalAbsoluteSiderealTime();
+		initializeLocalMeanSiderealTime();
 	}
 
 	/**
@@ -58,7 +62,7 @@ public class CelestialObjectList {
 	public CelestialObjectList() {
 		System.out.println("Automatically generating UTCTime.");
 		this.UTCTime = Instant.now();
-		initializeLocalAbsoluteSiderealTime();
+		initializeLocalMeanSiderealTime();
 	}
 
 	/**
@@ -84,18 +88,25 @@ public class CelestialObjectList {
 
 		// Changes sidereal time only if new longitude differs from old longitude
 		if (Double.compare(this.LONG, LONG) != 0) {
-			double deltaSiderealTime = (LONG - this.LONG) / 15; // Difference in sidereal time in hours, where 1hr = 15 degrees of longitude
-			localAbsoluteSiderealTime = (localAbsoluteSiderealTime + deltaSiderealTime) % 24; // Sets new sidereal time at current location
+			double deltaSiderealTime = (LONG - this.LONG) / 15.0; // Difference in sidereal time in hours, where 1hr = 15 degrees of longitud
+			localMeanSiderealTime = (localMeanSiderealTime + deltaSiderealTime) % 24; // Sets new sidereal time at current location
+
+			// If result from modulus is negative, convert to positive number.
+			if (localMeanSiderealTime < 0)
+				localMeanSiderealTime += 24;
+
 			this.LONG = LONG;
 		}
 
 		this.LAT = LAT;
 
+		// API call to get time zone for new location
 		String urlString = String.format("https://timeapi.io/api/TimeZone/coordinate?latitude=%s&longitude=%s", LAT, LONG);
 
 		// API result to parse
 		String result = "";
 
+		// Parses the result into a string
 		try {
 			URL url = new URL(urlString);
 			HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
@@ -118,7 +129,7 @@ public class CelestialObjectList {
 		// Gets timezone ID from result
 		int valueEnd = result.indexOf("\"", 13);
 		String localTimeZone = result.substring(13, valueEnd);
-		
+
 		// Sets timezone to the correct ID
 		timezone.setID(localTimeZone);
 
@@ -142,8 +153,8 @@ public class CelestialObjectList {
 	}
 
 	/**
-	 * Increments both the UTC time and local absolute sidereal time by the number
-	 * of hours from the argument.
+	 * Increments both the UTC time and local mean sidereal time by the number of
+	 * hours from the argument.
 	 * 
 	 * @param amount - amount of hours to increment the observation time by
 	 */
@@ -151,9 +162,9 @@ public class CelestialObjectList {
 		// Increments UTCTime by amount (hours)
 		UTCTime = UTCTime.plusSeconds((long) (3600 * amount));
 
-		// Increments local absolute sidereal time by slightly more than 1hr per hour to
+		// Increments local mean sidereal time by slightly more than 1hr per hour to
 		// account for the difference between sidereal and solar days
-		localAbsoluteSiderealTime = (localAbsoluteSiderealTime + amount * 1.002737909350795) % 24;
+		localMeanSiderealTime = (localMeanSiderealTime + amount * 1.002737909350795) % 24;
 
 		// Sets all objects' positions to not be in sync with observation time/position
 		for (CelestialObject object : celestialObjects.values())
@@ -161,23 +172,25 @@ public class CelestialObjectList {
 	}
 
 	/**
-	 * Gets local absolute sidereal time from US Navy. Only needs to be called once.
+	 * Gets local mean sidereal time from US Navy. Only needs to be called once.
 	 */
-	private void initializeLocalAbsoluteSiderealTime() {
+	private void initializeLocalMeanSiderealTime() {
 
-		// Used to put date & time in the API call
-		String date = DateTimeFormatter.ISO_LOCAL_DATE.withZone(ZoneOffset.UTC).format(UTCTime);
+		// Separating hour, minute, and second from UTC time
 		int hour = UTCTime.atZone(ZoneOffset.UTC).getHour();
 		int minute = UTCTime.atZone(ZoneOffset.UTC).getMinute();
 		int second = UTCTime.atZone(ZoneOffset.UTC).getSecond();
 
-		// Builds the body
-		String urlString = String.format("https://aa.usno.navy.mil/api/siderealtime?date=%s&time=%s:%s:%s&coords=%s,%s&reps=1&intv_mag=1&intv_unit=minutes", date, hour, minute, second, LAT, LONG);
-
-		// API result to parse
-		String result = "";
-
 		try {
+			// Used to put date & time in the API call
+			String date = DateTimeFormatter.ISO_LOCAL_DATE.withZone(ZoneOffset.UTC).format(UTCTime);
+
+			// Builds the body
+			String urlString = String.format("https://aa.usno.navy.mil/api/siderealtime?date=%s&time=%s:%s:%s&coords=%s,%s&reps=1&intv_mag=1&intv_unit=minutes", date, hour, minute, second, LAT, LONG);
+
+			// API result to parse
+			String result = "";
+
 			URL url = new URL(urlString);
 			HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
 			urlConnection.setRequestMethod("GET");
@@ -190,27 +203,45 @@ public class CelestialObjectList {
 			while ((s = reader.readLine()) != null)
 				result += s;
 
-		} catch (MalformedURLException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
+			// Retrieves local absolute sidereal time from result
+			int lastIndex = result.indexOf("\"last\":");
+			int valueStart = result.indexOf("\"", lastIndex + 7) + 1;
+			int valueEnd = result.indexOf("\"", valueStart);
+
+			String siderealTime = result.substring(valueStart, valueEnd);
+
+			Scanner scnr = new Scanner(siderealTime);
+			scnr.useDelimiter(":");
+
+			// Converts time from hh:mm:ss into decimal format
+			localMeanSiderealTime = scnr.nextDouble();
+			localMeanSiderealTime += scnr.nextDouble() / 60;
+			localMeanSiderealTime += scnr.nextDouble() / 3600;
+			scnr.close();
+
+		} catch (Exception e) {
+			System.out.println("Invalid result from API. Calculating sidereal time locally (may slightly affect accuracy).");
+
+			// Getting julian day from UTC time (doesn't include fraction of the day)
+			LocalDate today = UTCTime.atZone(ZoneOffset.UTC).toLocalDate();
+			long julianDay = today.getLong(JulianFields.JULIAN_DAY);
+
+			// Julian date (includes fraction of the day)
+			double julianDate = julianDay + (hour + minute / 60.0 + second / 3600.0 - 12.0) % 24 / 24;
+
+			// Number of julian centuries since J2000, Jan 1, 2000, 12:00 Terrestrial Time
+			double t = (julianDate - 2451545.0) / 36525.0;
+
+			double greenwichMeanStandardTime = 280.46061837 + 360.98564736629 * (julianDate - 2451545.0) + 0.000387933 * t * t - t * t * t / 38710000.0;
+
+			greenwichMeanStandardTime = (greenwichMeanStandardTime % 360.0) / 15;
+
+			localMeanSiderealTime = greenwichMeanStandardTime + LONG / 15;
+
+			// Converts LMST to positive number if negative, i.e., -1 will correspond to 23:00
+			if (localMeanSiderealTime < 0)
+				localMeanSiderealTime += 24;
 		}
-
-		// Retrieves local absolute sidereal time from result
-		int lastIndex = result.indexOf("\"last\":");
-		int valueStart = result.indexOf("\"", lastIndex + 7) + 1;
-		int valueEnd = result.indexOf("\"", valueStart);
-
-		String siderealTime = result.substring(valueStart, valueEnd);
-
-		Scanner scnr = new Scanner(siderealTime);
-		scnr.useDelimiter(":");
-
-		// Converts time from hh:mm:ss into decimal format
-		localAbsoluteSiderealTime = scnr.nextDouble();
-		localAbsoluteSiderealTime += scnr.nextDouble() / 60;
-		localAbsoluteSiderealTime += scnr.nextDouble() / 3600;
-		scnr.close();
 	}
 
 	/**
@@ -232,12 +263,12 @@ public class CelestialObjectList {
 	}
 
 	/**
-	 * Gets the absolute sidereal time in hours at the current observation location.
+	 * Gets the mean sidereal time in hours at the current observation location.
 	 * 
-	 * @return localAbsoluteSiderealTime
+	 * @return localMbsoluteSiderealTime
 	 */
-	public double getLocalAbsoluteSiderealTime() {
-		return localAbsoluteSiderealTime;
+	public double getLocalMbsoluteSiderealTime() {
+		return localMeanSiderealTime;
 	}
 
 	public CelestialObject getCelestialObject(String name) {
@@ -288,7 +319,7 @@ public class CelestialObjectList {
 		private void calculateAltitude() {
 
 			// Calculates hour angle (in degrees) of the object using the sidereal time and right ascension of the object.
-			double hourAngle = (localAbsoluteSiderealTime - rightAscension) * (360 / 24);
+			double hourAngle = (localMeanSiderealTime - rightAscension) * (360 / 24);
 
 			// Calculates altitude of the object in the sky
 			altitude = Math.sin(Math.toRadians(LAT)) * Math.sin(Math.toRadians(declination));
